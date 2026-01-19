@@ -1,0 +1,100 @@
+# ================================
+# PDF SUMMARIZATION USING RAG
+# Open-source | ChromaDB | HuggingFace
+# ================================
+
+# --------- INSTALL (Colab only) ----------
+# Uncomment below if running in Colab
+# !pip install chromadb sentence-transformers transformers torch pypdf
+
+# --------- IMPORTS ----------
+from pypdf import PdfReader
+from sentence_transformers import SentenceTransformer
+from transformers import pipeline
+import chromadb
+
+# --------- STEP 1: LOAD PDF ----------
+PDF_PATH = "sample.pdf"  # upload this file in Colab
+
+reader = PdfReader(PDF_PATH)
+text = ""
+for page in reader.pages:
+    extracted = page.extract_text()
+    if extracted:
+        text += extracted
+
+print("PDF loaded successfully")
+print("Total characters:", len(text))
+
+# --------- STEP 2: SPLIT TEXT (CHUNKING) ----------
+def split_text(text, chunk_size=1000, overlap=150):
+    chunks = []
+    start = 0
+    while start < len(text):
+        end = start + chunk_size
+        chunks.append(text[start:end])
+        start = end - overlap
+    return chunks
+
+chunks = split_text(text)
+print("Total chunks created:", len(chunks))
+
+# --------- STEP 3: CREATE EMBEDDINGS (OPEN SOURCE) ----------
+embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+chunk_embeddings = embedding_model.encode(chunks)
+
+print("Embeddings generated")
+
+# --------- STEP 4: STORE IN CHROMADB (VECTOR DATABASE) ----------
+client = chromadb.Client()
+collection = client.create_collection(name="pdf_rag_collection")
+
+for i, chunk in enumerate(chunks):
+    collection.add(
+        documents=[chunk],
+        embeddings=[chunk_embeddings[i].tolist()],
+        ids=[str(i)]
+    )
+
+print("Stored embeddings in ChromaDB")
+
+# --------- STEP 5: RETRIEVE RELEVANT CHUNKS (RAG) ----------
+query = "Provide a concise summary of the document highlighting key points"
+
+query_embedding = embedding_model.encode(query).tolist()
+
+results = collection.query(
+    query_embeddings=[query_embedding],
+    n_results=5
+)
+
+retrieved_chunks = results["documents"][0]
+context = " ".join(retrieved_chunks)
+
+print("Relevant chunks retrieved")
+
+# --------- STEP 6: OPEN-SOURCE LLM (NO OPENAI) ----------
+summarizer = pipeline(
+    "text2text-generation",
+    model="google/flan-t5-base",
+    max_length=300,
+    temperature=0
+)
+
+# --------- STEP 7: FINAL RAG-BASED SUMMARY ----------
+prompt = f"""
+Summarize the following document clearly and concisely:
+
+{context}
+"""
+
+summary = summarizer(prompt)[0]["generated_text"]
+
+print("\n===== FINAL SUMMARY =====\n")
+print(summary)
+
+# --------- STEP 8: SAVE OUTPUT ----------
+with open("summary.txt", "w") as f:
+    f.write(summary)
+
+print("\nSummary saved to summary.txt")
