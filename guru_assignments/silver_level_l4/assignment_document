@@ -1,0 +1,5 @@
+1.Install the AutoGPT framework and create an AI agent program on it
+2.Use the LlamaIndex framework to do the Telemetry agent application program. This program we have already done with the Langgraph framework in the class, but for the assignment please do this now with the Llamaindex framework.
+ 
+3.create an a program that takes native language voice as input and 
+replies in another native language voice
